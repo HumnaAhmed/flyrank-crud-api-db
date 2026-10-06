@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 import sqlite3
 from pathlib import Path
 
-
 app = FastAPI()
 
 DB_FILE = Path(__file__).parent / "tasks.db"
