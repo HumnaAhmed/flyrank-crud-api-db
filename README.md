@@ -10,7 +10,7 @@ This project is the database version of the Task API from the previous assignmen
 - FastAPI
 - Uvicorn
 - SQLite
-- Python sqlite3
+- Python `sqlite3`
 
 ## Why SQLite?
 
@@ -22,91 +22,97 @@ The database file is:
 
 ```text
 tasks.db
+
+```
+
 It is created automatically when the application starts.
 
-The database contains a tasks table with:
+The database contains a `tasks` table with:
 
-id — integer primary key
-title — text
-done — boolean
+* `id` — integer primary key
+* `title` — text
+* `done` — boolean
 
 The three example tasks are inserted only when the table is empty.
 
-Setup
+## Setup
 
 Create a virtual environment:
 
+```bash
 python -m venv .venv
+
+```
 
 Activate it on Windows:
 
+```bash
 .venv\Scripts\activate
+
+```
 
 Install dependencies:
 
+```bash
 pip install -r requirements.txt
-Run
+
+```
+
+## Run
+
+```bash
 uvicorn main:app --reload
 
-Open:
+```
 
+Open:
 http://localhost:8000/docs
 
 The SQLite database is created automatically.
 
-Endpoints
-Method	Endpoint	Description
-GET	/	API information
-GET	/health	Health check
-GET	/tasks	Return all tasks
-GET	/tasks/{task_id}	Return one task
-POST	/tasks	Create a task
-PUT	/tasks/{task_id}	Update a task
-DELETE	/tasks/{task_id}	Delete a task
-Example SQL Query
+## Endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/` | API information |
+| GET | `/health` | Health check |
+| GET | `/tasks` | Return all tasks |
+| GET | `/tasks/{task_id}` | Return one task |
+| POST | `/tasks` | Create a task |
+| PUT | `/tasks/{task_id}` | Update a task |
+| DELETE | `/tasks/{task_id}` | Delete a task |
+
+## Example SQL Query
 
 The database was manually inspected using:
 
+```sql
 SELECT * FROM tasks WHERE done = 1;
+
+```
 
 This returns only completed tasks.
 
 Other SQL queries tested during the assignment included:
 
+```sql
 SELECT * FROM tasks;
 SELECT COUNT(*) FROM tasks;
 UPDATE tasks SET done = 1;
 DELETE FROM tasks WHERE done = 1;
-Database Screenshot
 
-Persistence
+```
+
+## Database Screenshot
+
+## Persistence
 
 Tasks are stored in SQLite, so data survives when the FastAPI server is restarted.
 
-If tasks.db does not exist, the application automatically creates the database, creates the tasks table, and inserts the three example tasks.
+If `tasks.db` does not exist, the application automatically creates the database, creates the `tasks` table, and inserts the three example tasks.
 
+```
 
----
+Ise save karne ke baad, tum apna **Step 22** aur **Step 23** continue kar sakti ho GitHub par push karne ke liye!
 
-# STEP 17 — README check
-
-Open README preview in VS Code.
-
-Make sure:
-
-- SQLite explanation ✅
-- `tasks.db` mentioned ✅
-- run command ✅
-- endpoints table ✅
-- SQL query ✅
-- database screenshot visible in GitHub README after push ✅
-
-Assignment specifically requires all of these. :contentReference[oaicite:9]{index=9}
-
----
-
-# STEP 18 — Stage 5 commit
-
-```powershell
-git add README.md database-screenshot.png
-git commit -m "Stage 5: database documentation"
+```
