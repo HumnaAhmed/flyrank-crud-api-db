@@ -105,6 +105,9 @@ DELETE FROM tasks WHERE done = 1;
 
 ## Database Screenshot
 
+<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/535caf70-ac0f-4e4c-8de7-06d0e9a5f104" />
+
+
 ## Persistence
 
 Tasks are stored in SQLite, so data survives when the FastAPI server is restarted.
