@@ -2,12 +2,14 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-import sqlite3
-from pathlib import Path
+from dotenv import load_dotenv
+import psycopg
+import os
 
+load_dotenv(override=True)
 app = FastAPI()
 
-DB_FILE = Path(__file__).parent / "tasks.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 class TaskCreate(BaseModel):
@@ -20,45 +22,7 @@ class TaskUpdate(BaseModel):
 
 
 def get_connection():
-    connection = sqlite3.connect(DB_FILE)
-    connection.row_factory = sqlite3.Row
-    return connection
-
-
-def initialize_database():
-    connection = get_connection()
-
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            done BOOLEAN NOT NULL DEFAULT 0
-        )
-        """
-    )
-
-    task_count = connection.execute(
-        "SELECT COUNT(*) FROM tasks"
-    ).fetchone()[0]
-
-    if task_count == 0:
-        connection.executemany(
-            "INSERT INTO tasks (title, done) VALUES (?, ?)",
-            [
-                ("Learn FastAPI", 0),
-                ("Build a CRUD API", 0),
-                ("Write the README", 1),
-            ],
-        )
-
-    connection.commit()
-    connection.close()
-
-
-@app.on_event("startup")
-def startup():
-    initialize_database()
+    return psycopg.connect(DATABASE_URL)
 
 
 @app.exception_handler(RequestValidationError)
@@ -83,10 +47,7 @@ async def http_exception_handler(
     )
 
 
-@app.get(
-    "/",
-    description="Show basic information about the Task API."
-)
+@app.get("/", description="Show basic information about the Task API.")
 def home():
     return {
         "name": "Task API",
@@ -95,52 +56,39 @@ def home():
     }
 
 
-@app.get(
-    "/health",
-    description="Check whether the API is running."
-)
+@app.get("/health", description="Check whether the API is running.")
 def health():
-    return {
-        "status": "ok"
-    }
+    return {"status": "ok"}
 
 
-@app.get(
-    "/tasks",
-    description="Return all tasks."
-)
+@app.get("/tasks", description="Return all tasks.")
 def get_tasks():
-    connection = get_connection()
-
-    rows = connection.execute(
-        "SELECT id, title, done FROM tasks ORDER BY id"
-    ).fetchall()
-
-    connection.close()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, title, done FROM tasks ORDER BY id"
+            )
+            rows = cursor.fetchall()
 
     return [
         {
-            "id": row["id"],
-            "title": row["title"],
-            "done": bool(row["done"])
+            "id": row[0],
+            "title": row[1],
+            "done": row[2]
         }
         for row in rows
     ]
 
 
-@app.get(
-    "/tasks/{task_id}",
-    description="Return one task by ID."
-)
+@app.get("/tasks/{task_id}", description="Return one task by ID.")
 def get_task(task_id: int):
-    connection = get_connection()
-
-    row = connection.execute(
-        "SELECT id, title, done FROM tasks WHERE id = ?",
-        (task_id,)
-    ).fetchone()
-
-    connection.close()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, title, done FROM tasks WHERE id = %s",
+                (task_id,)
+            )
+            row = cursor.fetchone()
 
     if row is None:
         raise HTTPException(
@@ -149,9 +97,9 @@ def get_task(task_id: int):
         )
 
     return {
-        "id": row["id"],
-        "title": row["title"],
-        "done": bool(row["done"])
+        "id": row[0],
+        "title": row[1],
+        "done": row[2]
     }
 
 
@@ -161,104 +109,110 @@ def get_task(task_id: int):
     description="Create a new task."
 )
 def create_task(task_data: TaskCreate):
-    connection = get_connection()
-
-    cursor = connection.execute(
-        "INSERT INTO tasks (title, done) VALUES (?, ?)",
-        (task_data.title, 0)
-    )
-
-    connection.commit()
-
-    new_id = cursor.lastrowid
-
-    row = connection.execute(
-        "SELECT id, title, done FROM tasks WHERE id = ?",
-        (new_id,)
-    ).fetchone()
-
-    connection.close()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO tasks (title, done)
+                VALUES (%s, %s)
+                RETURNING id, title, done
+                """,
+                (task_data.title, False)
+            )
+            row = cursor.fetchone()
 
     return {
-        "id": row["id"],
-        "title": row["title"],
-        "done": bool(row["done"])
+        "id": row[0],
+        "title": row[1],
+        "done": row[2]
     }
 
 
-@app.put(
-    "/tasks/{task_id}",
-    description="Update a task by ID."
-)
+@app.put("/tasks/{task_id}", description="Update a task by ID.")
 def update_task(task_id: int, task_data: TaskUpdate):
-    connection = get_connection()
-
-    row = connection.execute(
-        "SELECT id, title, done FROM tasks WHERE id = ?",
-        (task_id,)
-    ).fetchone()
-
-    if row is None:
-        connection.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task {task_id} not found"
-        )
-
-    updates = task_data.model_dump(
-        exclude_unset=True
-    )
+    updates = task_data.model_dump(exclude_unset=True)
 
     if not updates:
-        connection.close()
-
         raise HTTPException(
             status_code=400,
             detail="Update body cannot be empty"
         )
 
     if "title" in updates and updates["title"] is None:
-        connection.close()
-
         raise HTTPException(
             status_code=400,
             detail="Title cannot be empty"
         )
 
     if "done" in updates and updates["done"] is None:
-        connection.close()
-
         raise HTTPException(
             status_code=400,
             detail="Done must be a boolean"
         )
 
-    if "title" in updates:
-        connection.execute(
-            "UPDATE tasks SET title = ? WHERE id = ?",
-            (updates["title"], task_id)
-        )
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
 
-    if "done" in updates:
-        connection.execute(
-            "UPDATE tasks SET done = ? WHERE id = ?",
-            (int(updates["done"]), task_id)
-        )
+            cursor.execute(
+                "SELECT id FROM tasks WHERE id = %s",
+                (task_id,)
+            )
 
-    connection.commit()
+            if cursor.fetchone() is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Task {task_id} not found"
+                )
 
-    updated_row = connection.execute(
-        "SELECT id, title, done FROM tasks WHERE id = ?",
-        (task_id,)
-    ).fetchone()
+            if "title" in updates and "done" in updates:
+                cursor.execute(
+                    """
+                    UPDATE tasks
+                    SET title = %s, done = %s
+                    WHERE id = %s
+                    RETURNING id, title, done
+                    """,
+                    (
+                        updates["title"],
+                        updates["done"],
+                        task_id
+                    )
+                )
 
-    connection.close()
+            elif "title" in updates:
+                cursor.execute(
+                    """
+                    UPDATE tasks
+                    SET title = %s
+                    WHERE id = %s
+                    RETURNING id, title, done
+                    """,
+                    (
+                        updates["title"],
+                        task_id
+                    )
+                )
+
+            else:
+                cursor.execute(
+                    """
+                    UPDATE tasks
+                    SET done = %s
+                    WHERE id = %s
+                    RETURNING id, title, done
+                    """,
+                    (
+                        updates["done"],
+                        task_id
+                    )
+                )
+
+            row = cursor.fetchone()
 
     return {
-        "id": updated_row["id"],
-        "title": updated_row["title"],
-        "done": bool(updated_row["done"])
+        "id": row[0],
+        "title": row[1],
+        "done": row[2]
     }
 
 
@@ -268,27 +222,19 @@ def update_task(task_id: int, task_data: TaskUpdate):
     description="Delete a task by ID."
 )
 def delete_task(task_id: int):
-    connection = get_connection()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM tasks WHERE id = %s RETURNING id",
+                (task_id,)
+            )
 
-    row = connection.execute(
-        "SELECT id FROM tasks WHERE id = ?",
-        (task_id,)
-    ).fetchone()
+            row = cursor.fetchone()
 
-    if row is None:
-        connection.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task {task_id} not found"
-        )
-
-    connection.execute(
-        "DELETE FROM tasks WHERE id = ?",
-        (task_id,)
-    )
-
-    connection.commit()
-    connection.close()
+            if row is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Task {task_id} not found"
+                )
 
     return

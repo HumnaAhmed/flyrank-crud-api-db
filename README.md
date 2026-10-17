@@ -1,74 +1,24 @@
-# Task API — SQLite Database
+```markdown
+# FlyRank CRUD API with PostgreSQL & Docker (BE-04)
 
-A beginner-friendly CRUD API built with FastAPI and SQLite.
+## Architecture Overview
+This project is a RESTful API built with **FastAPI**, containerized using **Docker**, and connected to a **PostgreSQL** database. 
+- The application and database run in separate Docker containers managed by **Docker Compose**.
+- The containers communicate securely over a shared internal Docker network.
+- Healthchecks and `depends_on` configurations ensure the FastAPI application only boots after the PostgreSQL database is fully initialized and ready to accept connections.
 
-This project is the database version of the Task API from the previous assignment. The API endpoints remain the same, but tasks are now stored permanently in a SQLite database instead of an in-memory Python list.
+## Database Integration
+To fulfill the core architectural goal of this assignment, the data storage mechanism was completely refactored to use PostgreSQL instead of SQLite/in-memory lists. 
+- The `psycopg` connection and SQL queries were integrated directly into the FastAPI route handlers in `main.py`.
+- Database initialization is handled automatically on the first boot via an `init.sql` script mounted to the container.
 
-## Technologies
-
-- Python
-- FastAPI
-- Uvicorn
-- SQLite
-- Python `sqlite3`
-
-## Why SQLite?
-
-SQLite was chosen because it is lightweight, requires no separate database server, and stores the database in a single local file.
-
-## Database
-
-The database file is:
-
-```text
-tasks.db
-
-```
-
-It is created automatically when the application starts.
-
-The database contains a `tasks` table with:
-
-* `id` — integer primary key
-* `title` — text
-* `done` — boolean
-
-The three example tasks are inserted only when the table is empty.
-
-## Setup
-
-Create a virtual environment:
-
-```bash
-python -m venv .venv
-
-```
-
-Activate it on Windows:
-
-```bash
-.venv\Scripts\activate
-
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-
-```
-
-## Run
-
-```bash
-uvicorn main:app --reload
-
-```
-
-Open:
-http://localhost:8000/docs
-
-The SQLite database is created automatically.
+## Data Persistence Verification
+Data persistence is achieved using **Docker Volumes** (`postgres_data` mapped to `/var/lib/postgresql/data`). Persistence was actively tested and proven using the following methodology:
+1. Started the stack using `docker compose up -d`.
+2. Created new tasks via `POST /tasks` and verified their existence in the database.
+3. Completely destroyed the running containers using `docker compose down`.
+4. Restarted the stack using `docker compose up -d`.
+5. Executed a `GET /tasks` request. The previously created rows were still present and retrieved successfully, proving the data survives container restarts and destruction.
 
 ## Endpoints
 
@@ -82,40 +32,35 @@ The SQLite database is created automatically.
 | PUT | `/tasks/{task_id}` | Update a task |
 | DELETE | `/tasks/{task_id}` | Delete a task |
 
-## Example SQL Query
+## How to Run Locally
 
-The database was manually inspected using:
-
-```sql
-SELECT * FROM tasks WHERE done = 1;
-
-```
-
-This returns only completed tasks.
-
-Other SQL queries tested during the assignment included:
-
-```sql
-SELECT * FROM tasks;
-SELECT COUNT(*) FROM tasks;
-UPDATE tasks SET done = 1;
-DELETE FROM tasks WHERE done = 1;
+1. **Clone the repository:**
+   ```bash
+   git clone <your-repo-url>
+   cd <your-repo-folder>
 
 ```
 
-## Database Screenshot
-
-<img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/535caf70-ac0f-4e4c-8de7-06d0e9a5f104" />
-
-
-## Persistence
-
-Tasks are stored in SQLite, so data survives when the FastAPI server is restarted.
-
-If `tasks.db` does not exist, the application automatically creates the database, creates the `tasks` table, and inserts the three example tasks.
+2. **Configure Environment:**
+Create a `.env` file in the root directory based on the provided example:
+```bash
+cp .env.example .env
 
 ```
 
-Ise save karne ke baad, tum apna **Step 22** aur **Step 23** continue kar sakti ho GitHub par push karne ke liye!
+
+3. **Launch the Stack:**
+Build and start the application and database containers:
+```bash
+docker compose up --build -d
+
+```
+
+
+4. **Access the API:**
+* Interactive API Documentation (Swagger UI): `http://localhost:8000/docs`
+* API endpoints are available at `http://localhost:8000/tasks`
+
+
 
 ```
