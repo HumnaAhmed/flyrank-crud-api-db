@@ -3,28 +3,27 @@ services:
     image: postgres:16
     container_name: flyrank-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: taskdb
+      POSTGRES_USER: taskuser
+      POSTGRES_PASSWORD: taskpassword
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Yeh line container start hotay hi init.sql ko auto-run kar degi
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U taskuser -d taskdb"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   app:
     build: .
-    container_name: flyrank-app
+    container_name: flyrank-task-api
+    env_file:
+      - .env
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
     depends_on:
       db:
         condition: service_healthy

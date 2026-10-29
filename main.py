@@ -1,15 +1,12 @@
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
-import psycopg
-import os
 
-load_dotenv(override=True)
+import repository
+
 app = FastAPI()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 class TaskCreate(BaseModel):
@@ -19,10 +16,6 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1)
     done: bool | None = None
-
-
-def get_connection():
-    return psycopg.connect(DATABASE_URL)
 
 
 @app.exception_handler(RequestValidationError)
@@ -63,44 +56,20 @@ def health():
 
 @app.get("/tasks", description="Return all tasks.")
 def get_tasks():
-    with get_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT id, title, done FROM tasks ORDER BY id"
-            )
-            rows = cursor.fetchall()
-
-    return [
-        {
-            "id": row[0],
-            "title": row[1],
-            "done": row[2]
-        }
-        for row in rows
-    ]
+    return repository.get_all_tasks()
 
 
 @app.get("/tasks/{task_id}", description="Return one task by ID.")
 def get_task(task_id: int):
-    with get_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT id, title, done FROM tasks WHERE id = %s",
-                (task_id,)
-            )
-            row = cursor.fetchone()
+    task = repository.get_task_by_id(task_id)
 
-    if row is None:
+    if task is None:
         raise HTTPException(
             status_code=404,
             detail=f"Task {task_id} not found"
         )
 
-    return {
-        "id": row[0],
-        "title": row[1],
-        "done": row[2]
-    }
+    return task
 
 
 @app.post(
@@ -109,23 +78,7 @@ def get_task(task_id: int):
     description="Create a new task."
 )
 def create_task(task_data: TaskCreate):
-    with get_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO tasks (title, done)
-                VALUES (%s, %s)
-                RETURNING id, title, done
-                """,
-                (task_data.title, False)
-            )
-            row = cursor.fetchone()
-
-    return {
-        "id": row[0],
-        "title": row[1],
-        "done": row[2]
-    }
+    return repository.create_task(task_data.title)
 
 
 @app.put("/tasks/{task_id}", description="Update a task by ID.")
@@ -150,70 +103,15 @@ def update_task(task_id: int, task_data: TaskUpdate):
             detail="Done must be a boolean"
         )
 
-    with get_connection() as connection:
-        with connection.cursor() as cursor:
+    task = repository.update_task(task_id, updates)
 
-            cursor.execute(
-                "SELECT id FROM tasks WHERE id = %s",
-                (task_id,)
-            )
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task {task_id} not found"
+        )
 
-            if cursor.fetchone() is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Task {task_id} not found"
-                )
-
-            if "title" in updates and "done" in updates:
-                cursor.execute(
-                    """
-                    UPDATE tasks
-                    SET title = %s, done = %s
-                    WHERE id = %s
-                    RETURNING id, title, done
-                    """,
-                    (
-                        updates["title"],
-                        updates["done"],
-                        task_id
-                    )
-                )
-
-            elif "title" in updates:
-                cursor.execute(
-                    """
-                    UPDATE tasks
-                    SET title = %s
-                    WHERE id = %s
-                    RETURNING id, title, done
-                    """,
-                    (
-                        updates["title"],
-                        task_id
-                    )
-                )
-
-            else:
-                cursor.execute(
-                    """
-                    UPDATE tasks
-                    SET done = %s
-                    WHERE id = %s
-                    RETURNING id, title, done
-                    """,
-                    (
-                        updates["done"],
-                        task_id
-                    )
-                )
-
-            row = cursor.fetchone()
-
-    return {
-        "id": row[0],
-        "title": row[1],
-        "done": row[2]
-    }
+    return task
 
 
 @app.delete(
@@ -222,19 +120,12 @@ def update_task(task_id: int, task_data: TaskUpdate):
     description="Delete a task by ID."
 )
 def delete_task(task_id: int):
-    with get_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "DELETE FROM tasks WHERE id = %s RETURNING id",
-                (task_id,)
-            )
+    deleted = repository.delete_task(task_id)
 
-            row = cursor.fetchone()
-
-            if row is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Task {task_id} not found"
-                )
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task {task_id} not found"
+        )
 
     return
